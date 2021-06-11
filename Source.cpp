@@ -2,6 +2,7 @@
 
 #include <windows.h>
 #include <windowsx.h>
+#include "resource.h"
 
 #define DEFAULT_DPI 96
 #define SCALEX(X) MulDiv(X, uDpiX, DEFAULT_DPI)
@@ -62,13 +63,26 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	static UINT uDpiX = DEFAULT_DPI, uDpiY = DEFAULT_DPI;
 	static HBRUSH hBrush;
 	static BOOL bDrag;
+	static HCURSOR hCursor;
 	switch (msg)
 	{
 	case WM_CREATE:
+		hCursor = LoadCursor(((LPCREATESTRUCT)lParam)->hInstance, MAKEINTRESOURCE(IDC_CURSOR1));
 		hBrush = CreateSolidBrush(RGB(255, 255, 255));
 		SetClassLongPtr(hWnd, GCLP_HBRBACKGROUND, (LONG_PTR)hBrush);
-		hEdit = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("EDIT"), 0, WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_AUTOHSCROLL | ES_AUTOVSCROLL, 0, 0, 0, 0, hWnd, 0, ((LPCREATESTRUCT)lParam)->hInstance, 0);
+		hEdit = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("EDIT"), 0, WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_AUTOHSCROLL | ES_AUTOVSCROLL | ES_READONLY, 0, 0, 0, 0, hWnd, 0, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 		SendMessage(hWnd, WM_DPICHANGED, 0, 0);
+		break;
+	case WM_PAINT:
+		{
+			PAINTSTRUCT ps;
+			HDC hdc = BeginPaint(hWnd, &ps);
+			if (!bDrag)
+			{
+				DrawIcon(hdc, POINT2PIXEL(10), POINT2PIXEL(10), hCursor);
+			}
+			EndPaint(hWnd, &ps);
+		}
 		break;
 	case WM_LBUTTONDOWN:
 		bDrag = TRUE;
@@ -77,6 +91,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	case WM_MOUSEMOVE:
 		if (bDrag)
 		{
+			SetCursor(hCursor);
 			POINT point = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
 			ClientToScreen(hWnd, &point);
 			HWND hDesktop = GetDesktopWindow();
@@ -86,7 +101,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			{
 				SetWindowText(hEdit, 0);
 				WCHAR szText[256];
-				wsprintf(szText, L"#%02X%02X%02X\r\n", GetRValue(color), GetGValue(color), GetBValue(color));
+				wsprintf(szText, L"#%02x%02x%02x\r\n", GetRValue(color), GetGValue(color), GetBValue(color));
 				SendMessage(hEdit, EM_REPLACESEL, (WPARAM)FALSE, (LPARAM)szText);
 				wsprintf(szText, L"%d, %d, %d\r\n", GetRValue(color), GetGValue(color), GetBValue(color));
 				SendMessage(hEdit, EM_REPLACESEL, (WPARAM)FALSE, (LPARAM)szText);
@@ -101,11 +116,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	case WM_LBUTTONUP:
 		if (bDrag) {
 			ReleaseCapture();
+			InvalidateRect(hWnd, 0, TRUE);
 			bDrag = FALSE;
 		}
 		break;
 	case WM_SIZE:
-		MoveWindow(hEdit, POINT2PIXEL(10), POINT2PIXEL(10), LOWORD(lParam) - POINT2PIXEL(20), HIWORD(lParam) - POINT2PIXEL(20), TRUE);
+		MoveWindow(hEdit, POINT2PIXEL(10 + 32 + 10), POINT2PIXEL(10), LOWORD(lParam) - POINT2PIXEL(20 + 32 + 10), HIWORD(lParam) - POINT2PIXEL(20), TRUE);
 		break;
 	case WM_NCCREATE:
 		{
@@ -129,6 +145,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		SendMessage(hEdit, WM_SETFONT, (WPARAM)hFont, 0);
 		break;
 	case WM_DESTROY:
+		DestroyCursor(hCursor);
 		DeleteObject(hBrush);
 		DeleteObject(hFont);
 		PostQuitMessage(0);
@@ -157,7 +174,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPreInst, LPSTR pCmdLine, int 
 	RegisterClass(&wndclass);
 	HWND hWnd = CreateWindow(
 		szClassName,
-		TEXT("Window"),
+		TEXT("Desktop Color Picker"),
 		WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
 		CW_USEDEFAULT,
 		0,
