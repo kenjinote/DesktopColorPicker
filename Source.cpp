@@ -69,14 +69,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	case WM_CREATE:
 		hCursor = LoadCursor(((LPCREATESTRUCT)lParam)->hInstance, MAKEINTRESOURCE(IDC_CURSOR1));
 		hBrush = CreateSolidBrush(RGB(255, 255, 255));
-		SetClassLongPtr(hWnd, GCLP_HBRBACKGROUND, (LONG_PTR)hBrush);
 		hEdit = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("EDIT"), 0, WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_AUTOHSCROLL | ES_AUTOVSCROLL | ES_READONLY, 0, 0, 0, 0, hWnd, 0, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 		SendMessage(hWnd, WM_DPICHANGED, 0, 0);
+		SetWindowPos(hWnd, NULL, 0, 0, POINT2PIXEL(200), POINT2PIXEL(100), SWP_NOMOVE);
 		break;
 	case WM_PAINT:
 		{
 			PAINTSTRUCT ps;
 			HDC hdc = BeginPaint(hWnd, &ps);
+			HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, hBrush);
+			Rectangle(hdc, POINT2PIXEL(10), POINT2PIXEL(10), POINT2PIXEL(10) + GetSystemMetrics(SM_CXICON), POINT2PIXEL(10) + GetSystemMetrics(SM_CYICON));
+			SelectObject(hdc, hOldBrush);
 			if (!bDrag)
 			{
 				DrawIcon(hdc, POINT2PIXEL(10), POINT2PIXEL(10), hCursor);
@@ -96,32 +99,31 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			ClientToScreen(hWnd, &point);
 			HWND hDesktop = GetDesktopWindow();
 			HDC hdc = GetDC(hDesktop);
-			DeleteObject(hBrush);
 			COLORREF color = GetPixel(hdc, point.x, point.y);
 			{
-				SetWindowText(hEdit, 0);
 				WCHAR szText[256];
-				wsprintf(szText, L"#%02x%02x%02x\r\n", GetRValue(color), GetGValue(color), GetBValue(color));
-				SendMessage(hEdit, EM_REPLACESEL, (WPARAM)FALSE, (LPARAM)szText);
-				wsprintf(szText, L"%d, %d, %d\r\n", GetRValue(color), GetGValue(color), GetBValue(color));
-				SendMessage(hEdit, EM_REPLACESEL, (WPARAM)FALSE, (LPARAM)szText);
-
+				wsprintf(szText, L"#%02x%02x%02x\r\nRGB(%d, %d, %d)\r\n", GetRValue(color), GetGValue(color), GetBValue(color),
+					GetRValue(color), GetGValue(color), GetBValue(color));
+				SetWindowText(hEdit, szText);
 			}
+			DeleteObject(hBrush);
 			hBrush = CreateSolidBrush(color);
-			SetClassLongPtr(hWnd, GCLP_HBRBACKGROUND, (LONG_PTR)hBrush);
 			InvalidateRect(hWnd, 0, TRUE);
 			ReleaseDC(hDesktop, hdc);
 		}
 		break;
 	case WM_LBUTTONUP:
-		if (bDrag) {
+		if (bDrag)
+		{
 			ReleaseCapture();
-			InvalidateRect(hWnd, 0, TRUE);
 			bDrag = FALSE;
+			InvalidateRect(hWnd, 0, TRUE);
+			SendMessage(hEdit, EM_SETSEL, 0, -1);
+			SetFocus(hEdit);
 		}
 		break;
 	case WM_SIZE:
-		MoveWindow(hEdit, POINT2PIXEL(10 + 32 + 10), POINT2PIXEL(10), LOWORD(lParam) - POINT2PIXEL(20 + 32 + 10), HIWORD(lParam) - POINT2PIXEL(20), TRUE);
+		MoveWindow(hEdit, POINT2PIXEL(10 + 10) + GetSystemMetrics(SM_CXICON), POINT2PIXEL(10), LOWORD(lParam) - POINT2PIXEL(20 + 10) - GetSystemMetrics(SM_CXICON), HIWORD(lParam) - POINT2PIXEL(20), TRUE);
 		break;
 	case WM_NCCREATE:
 		{
@@ -172,10 +174,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPreInst, LPSTR pCmdLine, int 
 		szClassName
 	};
 	RegisterClass(&wndclass);
-	HWND hWnd = CreateWindow(
+	HWND hWnd = CreateWindowEx(
+		WS_EX_TOPMOST,
 		szClassName,
 		TEXT("Desktop Color Picker"),
-		WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
+		WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_CLIPCHILDREN,
 		CW_USEDEFAULT,
 		0,
 		CW_USEDEFAULT,
